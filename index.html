@@ -138,6 +138,163 @@
             opacity: 0.6;
             pointer-events: none;
         }
+
+        .history-panel {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .history-content {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        .history-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .history-header h2 {
+            color: #333;
+            margin: 0;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 2em;
+            cursor: pointer;
+            color: #667eea;
+            line-height: 1;
+        }
+
+        .close-btn:hover {
+            color: #764ba2;
+        }
+
+        .history-stats {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+
+        .history-stats h3 {
+            margin: 0 0 10px 0;
+            font-size: 1.2em;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            text-align: center;
+        }
+
+        .stat-item {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 10px;
+            border-radius: 8px;
+        }
+
+        .stat-value {
+            font-size: 1.5em;
+            font-weight: bold;
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+
+        .history-list {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .history-item {
+            background: #f0f0f0;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 10px;
+            border-left: 4px solid #667eea;
+        }
+
+        .history-item.win {
+            border-left-color: #4caf50;
+        }
+
+        .history-item.loss {
+            border-left-color: #f44336;
+        }
+
+        .history-item.draw {
+            border-left-color: #ff9800;
+        }
+
+        .history-item-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+
+        .history-result {
+            font-size: 1.1em;
+        }
+
+        .history-date {
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        .history-details {
+            color: #555;
+            font-size: 0.9em;
+            line-height: 1.6;
+        }
+
+        .move-sequence {
+            margin-top: 10px;
+            padding: 10px;
+            background: white;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 0.85em;
+        }
+
+        .clear-history-btn {
+            width: 100%;
+            background: #f44336;
+            color: white;
+            border: none;
+            padding: 12px;
+            font-size: 1em;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-top: 15px;
+            transition: all 0.3s ease;
+        }
+
+        .clear-history-btn:hover {
+            background: #d32f2f;
+        }
     </style>
 </head>
 <body>
@@ -168,6 +325,20 @@
             <div class="cell" data-index="8"></div>
         </div>
         <button id="resetBtn" class="reset-btn">Reset Game</button>
+        <button id="historyBtn" class="reset-btn" style="margin-left: 10px;">History</button>
+    </div>
+
+    <!-- History Panel -->
+    <div id="historyPanel" class="history-panel" style="display: none;">
+        <div class="history-content">
+            <div class="history-header">
+                <h2>Game History</h2>
+                <button id="closeHistoryBtn" class="close-btn">×</button>
+            </div>
+            <div id="historyStats" class="history-stats"></div>
+            <div id="historyList" class="history-list"></div>
+            <button id="clearHistoryBtn" class="clear-history-btn">Clear History</button>
+        </div>
     </div>
 
     <script>
@@ -177,6 +348,9 @@
         let gameMode = 'pvp'; // 'pvp' or 'pvc'
         let difficulty = 'easy'; // 'easy', 'medium', 'hard'
         let isAIThinking = false;
+        let moveHistory = []; // Track moves in current game
+        let gameStartTime = null;
+        let gameHistory = JSON.parse(localStorage.getItem('tictactoeHistory')) || [];
 
         const winningConditions = [
             [0, 1, 2],
@@ -195,6 +369,10 @@
         const modeButtons = document.querySelectorAll('.mode-btn');
         const difficultyButtons = document.querySelectorAll('.difficulty-btn');
         const difficultySelector = document.getElementById('difficultySelector');
+        const historyBtn = document.getElementById('historyBtn');
+        const historyPanel = document.getElementById('historyPanel');
+        const closeHistoryBtn = document.getElementById('closeHistoryBtn');
+        const clearHistoryBtn = document.getElementById('clearHistoryBtn');
 
         // Event listeners
         cells.forEach(cell => {
@@ -226,6 +404,22 @@
                 difficulty = this.dataset.difficulty;
                 resetGame();
             });
+        });
+
+        historyBtn.addEventListener('click', () => {
+            showHistory();
+        });
+
+        closeHistoryBtn.addEventListener('click', () => {
+            historyPanel.style.display = 'none';
+        });
+
+        clearHistoryBtn.addEventListener('click', () => {
+            if (confirm('Are you sure you want to clear all game history?')) {
+                gameHistory = [];
+                localStorage.setItem('tictactoeHistory', JSON.stringify(gameHistory));
+                showHistory();
+            }
         });
 
         function handleCellClick(e) {
@@ -260,17 +454,22 @@
             cells[index].textContent = player;
             cells[index].classList.add(player.toLowerCase());
 
+            // Record move
+            moveHistory.push({ player, position: index, timestamp: Date.now() });
+
             if (checkWin(player)) {
                 const winner = gameMode === 'pvc' && player === 'O' ? 'Computer' : `Player ${player}`;
                 messageElement.textContent = `${winner} wins!`;
                 gameActive = false;
                 highlightWinningCells(player);
+                recordGameResult(player === 'X' ? 'win' : 'loss', player);
                 return;
             }
 
             if (checkDraw()) {
                 messageElement.textContent = "It's a draw!";
                 gameActive = false;
+                recordGameResult('draw', null);
                 return;
             }
 
@@ -376,6 +575,8 @@
             currentPlayer = 'X';
             gameActive = true;
             isAIThinking = false;
+            moveHistory = [];
+            gameStartTime = Date.now();
             document.getElementById('board').classList.remove('ai-thinking');
             messageElement.textContent = "Player X's turn";
             
@@ -384,6 +585,119 @@
                 cell.classList.remove('x', 'o', 'winner');
             });
         }
+
+        function recordGameResult(outcome, winner) {
+            const gameEndTime = Date.now();
+            const duration = Math.round((gameEndTime - gameStartTime) / 1000); // seconds
+            
+            const gameRecord = {
+                timestamp: gameEndTime,
+                outcome: outcome, // 'win', 'loss', 'draw'
+                winner: winner,
+                mode: gameMode,
+                difficulty: gameMode === 'pvc' ? difficulty : null,
+                moves: moveHistory,
+                duration: duration,
+                finalBoard: [...board]
+            };
+
+            gameHistory.unshift(gameRecord); // Add to beginning
+            if (gameHistory.length > 50) gameHistory.pop(); // Keep last 50 games
+            localStorage.setItem('tictactoeHistory', JSON.stringify(gameHistory));
+        }
+
+        function showHistory() {
+            historyPanel.style.display = 'flex';
+            
+            // Calculate statistics
+            const stats = {
+                total: gameHistory.length,
+                wins: gameHistory.filter(g => g.outcome === 'win').length,
+                losses: gameHistory.filter(g => g.outcome === 'loss').length,
+                draws: gameHistory.filter(g => g.outcome === 'draw').length
+            };
+
+            // Display statistics
+            const statsHTML = `
+                <h3>Statistics</h3>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-value">${stats.total}</div>
+                        <div class="stat-label">Total Games</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">${stats.wins}</div>
+                        <div class="stat-label">Wins</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">${stats.losses}</div>
+                        <div class="stat-label">Losses</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">${stats.draws}</div>
+                        <div class="stat-label">Draws</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">${stats.total > 0 ? Math.round(stats.wins / stats.total * 100) : 0}%</div>
+                        <div class="stat-label">Win Rate</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">${gameHistory.length > 0 ? Math.round(gameHistory.reduce((sum, g) => sum + g.duration, 0) / gameHistory.length) : 0}s</div>
+                        <div class="stat-label">Avg Duration</div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('historyStats').innerHTML = statsHTML;
+
+            // Display game list
+            if (gameHistory.length === 0) {
+                document.getElementById('historyList').innerHTML = '<p style="text-align: center; color: #999;">No games played yet</p>';
+                return;
+            }
+
+            const historyHTML = gameHistory.map((game, index) => {
+                const date = new Date(game.timestamp);
+                const dateStr = date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+                
+                let resultText = '';
+                let resultClass = '';
+                if (game.outcome === 'win') {
+                    resultText = '🏆 You Won!';
+                    resultClass = 'win';
+                } else if (game.outcome === 'loss') {
+                    resultText = '❌ You Lost';
+                    resultClass = 'loss';
+                } else {
+                    resultText = '🤝 Draw';
+                    resultClass = 'draw';
+                }
+
+                const modeText = game.mode === 'pvc' ? `vs Computer (${game.difficulty})` : 'vs Player';
+                const movesText = game.moves.map((m, i) => `${i + 1}. ${m.player}→${m.position}`).join(', ');
+
+                return `
+                    <div class="history-item ${resultClass}">
+                        <div class="history-item-header">
+                            <span class="history-result">${resultText}</span>
+                            <span class="history-date">${dateStr}</span>
+                        </div>
+                        <div class="history-details">
+                            <div>Mode: ${modeText}</div>
+                            <div>Duration: ${game.duration}s | Moves: ${game.moves.length}</div>
+                            <div class="move-sequence">
+                                <strong>Move Sequence:</strong><br>
+                                ${movesText}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            document.getElementById('historyList').innerHTML = historyHTML;
+        }
+
+        // Initialize game start time
+        gameStartTime = Date.now();
     </script>
 </body>
 </html>
