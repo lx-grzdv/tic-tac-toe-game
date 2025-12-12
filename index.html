@@ -103,11 +103,58 @@
             transform: translateY(-2px);
             box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
         }
+
+        .game-mode {
+            margin-bottom: 20px;
+        }
+
+        .mode-btn, .difficulty-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            font-size: 1em;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .mode-btn:hover, .difficulty-btn:hover {
+            background: #764ba2;
+            transform: translateY(-2px);
+        }
+
+        .mode-btn.active, .difficulty-btn.active {
+            background: #764ba2;
+            box-shadow: 0 0 10px rgba(118, 75, 162, 0.5);
+        }
+
+        .difficulty-selector {
+            margin-bottom: 15px;
+        }
+
+        .ai-thinking {
+            opacity: 0.6;
+            pointer-events: none;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>Tic Tac Toe</h1>
+        
+        <div class="game-mode">
+            <button class="mode-btn active" data-mode="pvp">Player vs Player</button>
+            <button class="mode-btn" data-mode="pvc">Player vs Computer</button>
+        </div>
+
+        <div class="difficulty-selector" id="difficultySelector" style="display: none;">
+            <button class="difficulty-btn active" data-difficulty="easy">Easy</button>
+            <button class="difficulty-btn" data-difficulty="medium">Medium</button>
+            <button class="difficulty-btn" data-difficulty="hard">Hard</button>
+        </div>
+
         <div id="message" class="message">Player X's turn</div>
         <div class="board" id="board">
             <div class="cell" data-index="0"></div>
@@ -127,6 +174,9 @@
         let board = ['', '', '', '', '', '', '', '', ''];
         let currentPlayer = 'X';
         let gameActive = true;
+        let gameMode = 'pvp'; // 'pvp' or 'pvc'
+        let difficulty = 'easy'; // 'easy', 'medium', 'hard'
+        let isAIThinking = false;
 
         const winningConditions = [
             [0, 1, 2],
@@ -142,29 +192,79 @@
         const cells = document.querySelectorAll('.cell');
         const messageElement = document.getElementById('message');
         const resetBtn = document.getElementById('resetBtn');
+        const modeButtons = document.querySelectorAll('.mode-btn');
+        const difficultyButtons = document.querySelectorAll('.difficulty-btn');
+        const difficultySelector = document.getElementById('difficultySelector');
 
+        // Event listeners
         cells.forEach(cell => {
             cell.addEventListener('click', handleCellClick);
         });
 
         resetBtn.addEventListener('click', resetGame);
 
+        modeButtons.forEach(btn => {
+            btn.addEventListener('click', function() {
+                modeButtons.forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                gameMode = this.dataset.mode;
+                
+                if (gameMode === 'pvc') {
+                    difficultySelector.style.display = 'block';
+                } else {
+                    difficultySelector.style.display = 'none';
+                }
+                
+                resetGame();
+            });
+        });
+
+        difficultyButtons.forEach(btn => {
+            btn.addEventListener('click', function() {
+                difficultyButtons.forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                difficulty = this.dataset.difficulty;
+                resetGame();
+            });
+        });
+
         function handleCellClick(e) {
             const cell = e.target;
-            const index = cell.getAttribute('data-index');
+            const index = parseInt(cell.getAttribute('data-index'));
 
-            if (board[index] !== '' || !gameActive) {
+            if (board[index] !== '' || !gameActive || isAIThinking) {
                 return;
             }
 
-            board[index] = currentPlayer;
-            cell.textContent = currentPlayer;
-            cell.classList.add(currentPlayer.toLowerCase());
+            makeMove(index, currentPlayer);
 
-            if (checkWin()) {
-                messageElement.textContent = `Player ${currentPlayer} wins!`;
+            if (!gameActive) return;
+
+            // AI turn in PvC mode
+            if (gameMode === 'pvc' && currentPlayer === 'O') {
+                isAIThinking = true;
+                document.getElementById('board').classList.add('ai-thinking');
+                messageElement.textContent = 'Computer is thinking...';
+                
+                setTimeout(() => {
+                    const aiMove = getAIMove();
+                    makeMove(aiMove, 'O');
+                    isAIThinking = false;
+                    document.getElementById('board').classList.remove('ai-thinking');
+                }, 500);
+            }
+        }
+
+        function makeMove(index, player) {
+            board[index] = player;
+            cells[index].textContent = player;
+            cells[index].classList.add(player.toLowerCase());
+
+            if (checkWin(player)) {
+                const winner = gameMode === 'pvc' && player === 'O' ? 'Computer' : `Player ${player}`;
+                messageElement.textContent = `${winner} wins!`;
                 gameActive = false;
-                highlightWinningCells();
+                highlightWinningCells(player);
                 return;
             }
 
@@ -175,13 +275,84 @@
             }
 
             currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
-            messageElement.textContent = `Player ${currentPlayer}'s turn`;
+            const nextPlayer = gameMode === 'pvc' && currentPlayer === 'O' ? 'Computer' : `Player ${currentPlayer}`;
+            messageElement.textContent = `${nextPlayer}'s turn`;
         }
 
-        function checkWin() {
+        function getAIMove() {
+            const availableMoves = board.map((cell, index) => cell === '' ? index : null).filter(val => val !== null);
+            
+            if (difficulty === 'easy') {
+                // Random move
+                return availableMoves[Math.floor(Math.random() * availableMoves.length)];
+            } else if (difficulty === 'medium') {
+                // 50% optimal, 50% random
+                if (Math.random() < 0.5) {
+                    return getBestMove();
+                } else {
+                    return availableMoves[Math.floor(Math.random() * availableMoves.length)];
+                }
+            } else {
+                // Hard: always optimal
+                return getBestMove();
+            }
+        }
+
+        function getBestMove() {
+            let bestScore = -Infinity;
+            let bestMove = 0;
+
+            for (let i = 0; i < 9; i++) {
+                if (board[i] === '') {
+                    board[i] = 'O';
+                    let score = minimax(board, 0, false);
+                    board[i] = '';
+                    
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestMove = i;
+                    }
+                }
+            }
+
+            return bestMove;
+        }
+
+        function minimax(board, depth, isMaximizing) {
+            // Check terminal states
+            if (checkWin('O')) return 10 - depth;
+            if (checkWin('X')) return depth - 10;
+            if (checkDraw()) return 0;
+
+            if (isMaximizing) {
+                let bestScore = -Infinity;
+                for (let i = 0; i < 9; i++) {
+                    if (board[i] === '') {
+                        board[i] = 'O';
+                        let score = minimax(board, depth + 1, false);
+                        board[i] = '';
+                        bestScore = Math.max(score, bestScore);
+                    }
+                }
+                return bestScore;
+            } else {
+                let bestScore = Infinity;
+                for (let i = 0; i < 9; i++) {
+                    if (board[i] === '') {
+                        board[i] = 'X';
+                        let score = minimax(board, depth + 1, true);
+                        board[i] = '';
+                        bestScore = Math.min(score, bestScore);
+                    }
+                }
+                return bestScore;
+            }
+        }
+
+        function checkWin(player) {
             return winningConditions.some(condition => {
                 return condition.every(index => {
-                    return board[index] === currentPlayer;
+                    return board[index] === player;
                 });
             });
         }
@@ -190,9 +361,9 @@
             return board.every(cell => cell !== '');
         }
 
-        function highlightWinningCells() {
+        function highlightWinningCells(player) {
             winningConditions.forEach(condition => {
-                if (condition.every(index => board[index] === currentPlayer)) {
+                if (condition.every(index => board[index] === player)) {
                     condition.forEach(index => {
                         cells[index].classList.add('winner');
                     });
@@ -204,6 +375,8 @@
             board = ['', '', '', '', '', '', '', '', ''];
             currentPlayer = 'X';
             gameActive = true;
+            isAIThinking = false;
+            document.getElementById('board').classList.remove('ai-thinking');
             messageElement.textContent = "Player X's turn";
             
             cells.forEach(cell => {
